@@ -19,11 +19,33 @@ import {
 } from "@/lib/technology-business-types";
 import { normalizeOllamaHost, normalizeOllamaModel } from "@/lib/ollama-config";
 import { extractDocumentText } from "@/lib/document-extract";
+import {
+  ollamaTunnelHeaders,
+  parseOllamaGenerateResponse,
+  responseLooksLikeHtml,
+} from "@/lib/ollama-http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  try {
+    return await handleAnalyzePost(req);
+  } catch (e) {
+    console.error("[api/analyze]", e);
+    return NextResponse.json(
+      {
+        error:
+          e instanceof Error
+            ? e.message
+            : "Internal error while analyzing. Check server logs.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleAnalyzePost(req: Request) {
   let form: FormData;
   try {
     form = await req.formData();
@@ -235,7 +257,7 @@ export async function POST(req: Request) {
   try {
     ollamaRes = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: ollamaTunnelHeaders(ollamaHost),
       body: JSON.stringify({
         model: ollamaModel,
         prompt,
@@ -253,19 +275,35 @@ export async function POST(req: Request) {
 
   const rawText = await ollamaRes.text();
   if (!ollamaRes.ok) {
+    if (responseLooksLikeHtml(rawText)) {
+      return NextResponse.json(
+        {
+          error: `Ollama returned HTTP ${ollamaRes.status} with an HTML page instead of JSON.`,
+          hint: "Check the Ollama URL, ngrok tunnel, and that Ollama is running.",
+          rawSnippet: rawText.slice(0, 400),
+        },
+        { status: 502 }
+      );
+    }
     return NextResponse.json(
       { error: `Ollama error (${ollamaRes.status}): ${rawText || ollamaRes.statusText}` },
       { status: 502 }
     );
   }
 
-  let responseText = "";
-  try {
-    const parsed = JSON.parse(rawText) as { response?: string };
-    responseText = typeof parsed.response === "string" ? parsed.response : rawText;
-  } catch {
-    responseText = rawText;
+  const parsedBody = parseOllamaGenerateResponse(rawText);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      {
+        error: parsedBody.error,
+        rawSnippet: parsedBody.rawSnippet,
+        model: ollamaModel,
+      },
+      { status: 502 }
+    );
   }
+
+  const responseText = parsedBody.responseText;
 
   if (!responseText.trim()) {
     return NextResponse.json(

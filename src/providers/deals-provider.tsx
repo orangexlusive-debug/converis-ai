@@ -24,8 +24,8 @@ export type AppSettings = {
 };
 
 const defaultSettings: AppSettings = {
-  ollamaHost: "http://localhost:11434",
-  ollamaModel: "llama3.1:8b",
+  ollamaHost: "https://ee53-129-222-135-198.ngrok-free.app",
+  ollamaModel: "qwen2.5:32b",
 };
 
 type DealsContextValue = {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { normalizeOllamaHost, normalizeOllamaModel } from "@/lib/ollama-config";
+import { ollamaTunnelHeaders, responseLooksLikeHtml } from "@/lib/ollama-http";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -12,6 +13,21 @@ type ChatBody = {
 };
 
 export async function POST(req: Request) {
+  try {
+    return await handleChatPost(req);
+  } catch (e) {
+    console.error("[api/chat]", e);
+    return NextResponse.json(
+      {
+        error:
+          e instanceof Error ? e.message : "Internal error while chatting. Check server logs.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleChatPost(req: Request) {
   let body: ChatBody;
   try {
     body = (await req.json()) as ChatBody;
@@ -43,7 +59,7 @@ export async function POST(req: Request) {
   try {
     ollamaRes = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: ollamaTunnelHeaders(ollamaHost),
       body: JSON.stringify({
         model: ollamaModel,
         messages: ollamaMessages,
@@ -60,8 +76,29 @@ export async function POST(req: Request) {
 
   const rawText = await ollamaRes.text();
   if (!ollamaRes.ok) {
+    if (responseLooksLikeHtml(rawText)) {
+      return NextResponse.json(
+        {
+          error: `Ollama returned HTTP ${ollamaRes.status} with an HTML page instead of JSON.`,
+          hint: "Check the Ollama URL and ngrok tunnel.",
+          rawSnippet: rawText.slice(0, 400),
+        },
+        { status: 502 }
+      );
+    }
     return NextResponse.json(
       { error: `Ollama error (${ollamaRes.status}): ${rawText || ollamaRes.statusText}` },
+      { status: 502 }
+    );
+  }
+
+  if (responseLooksLikeHtml(rawText)) {
+    return NextResponse.json(
+      {
+        error:
+          "Ollama /api/chat returned HTML instead of JSON (often ngrok interstitial). Check tunnel headers and URL.",
+        rawSnippet: rawText.slice(0, 400),
+      },
       { status: 502 }
     );
   }
