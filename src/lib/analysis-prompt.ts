@@ -1,3 +1,5 @@
+import { CONVERIS_ANALYSIS_ROLE_LEAD } from "@/lib/converis-persona";
+
 export function buildAnalysisPrompt(params: {
   dealName: string;
   industry: string;
@@ -37,7 +39,7 @@ export function buildAnalysisPrompt(params: {
       `\n--- HEALTHCARE BUSINESS TYPE CONTEXT (for the model; user selected types without descriptions in UI) ---\n${healthcareBusinessContextForModel.trim()}\n`
       : "";
 
-  return `You are an expert post-merger integration (PMI) analyst. You must respond with a single valid JSON object only — no markdown, no code fences, no commentary before or after the JSON.
+  return `${CONVERIS_ANALYSIS_ROLE_LEAD}You must respond with a single valid JSON object only — no markdown, no code fences, no commentary before or after the JSON.
 
 Deal name: ${dealName}
 Industry context: ${industry}
@@ -46,7 +48,7 @@ Document notes:
 - Buyer PDF text may be truncated: ${buyerTruncated ? "yes (only first portion used)" : "no"}.
 - Seller PDF text may be truncated: ${sellerTruncated ? "yes (only first portion used)" : "no"}.
 
-Use ONLY information inferable from the excerpts below. Where the text is silent, say so in the relevant string fields and avoid inventing names, numbers, or facts not supported by the excerpts.
+Use ONLY information inferable from the excerpts below for deal-specific facts (names, figures, commitments). You may apply general M&A, PMI, and cross-industry expertise to structure the analysis, choose appropriate risk themes, and phrase uncertainty—without inventing particulars not supported by the excerpts. Where the text is silent, say so in the relevant string fields.
 
 --- BUYER DOCUMENTS (extracted text) ---
 ${buyerText || "(empty)"}

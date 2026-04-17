@@ -6,6 +6,7 @@ import { CreateDealModal } from "@/components/create-deal-modal";
 import { DealsGrid } from "@/components/deals-grid";
 import { IndustrySidebar } from "@/components/industry-sidebar";
 import { ChatPanel } from "@/components/chat-panel";
+import { ConverisLogoMark } from "@/components/converis-logo-mark";
 import { StarfieldCanvas } from "@/components/starfield-canvas";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -13,7 +14,6 @@ import { labelsForBankingBusinessTypeIds } from "@/lib/banking-business-types";
 import { labelsForHealthcareBusinessTypeIds } from "@/lib/healthcare-business-types";
 import { labelsForTechBusinessTypeIds } from "@/lib/technology-business-types";
 import { useDeals } from "@/providers/deals-provider";
-import { SparklesIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export function Dashboard() {
@@ -32,9 +32,7 @@ export function Dashboard() {
       <header className="relative z-10 shrink-0 border-b border-cyan-500/15 bg-black/55 backdrop-blur-xl supports-backdrop-filter:bg-black/40">
         <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 shadow-[0_0_24px_-4px_rgba(56,189,248,0.55)]">
-              <SparklesIcon className="size-4 text-white" />
-            </div>
+            <ConverisLogoMark size={32} className="drop-shadow-[0_0_16px_rgba(56,189,248,0.45)]" />
             <div>
               <div className="flex flex-wrap items-baseline gap-2">
                 <h1 className="text-sm font-semibold tracking-tight text-white">

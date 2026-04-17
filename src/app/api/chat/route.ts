@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CONVERIS_CHAT_SYSTEM_BASE } from "@/lib/converis-persona";
 import { normalizeOllamaHost, normalizeOllamaModel } from "@/lib/ollama-config";
 import { ollamaTunnelHeaders, responseLooksLikeHtml } from "@/lib/ollama-http";
 
@@ -46,9 +47,10 @@ async function handleChatPost(req: Request) {
   const ollamaHost = normalizeOllamaHost(body.ollamaHost);
   const ollamaModel = normalizeOllamaModel(body.ollamaModel);
 
-  const system =
-    body.dealContext?.trim() ||
-    "You are Converis AI, a concise PMI assistant. Answer only from the user’s context and documents they have shared. If uncertain, say so.";
+  const dealBlock = body.dealContext?.trim();
+  const system = dealBlock
+    ? `${CONVERIS_CHAT_SYSTEM_BASE}\n\n--- User deal context (prioritize for facts about this deal) ---\n${dealBlock}`
+    : CONVERIS_CHAT_SYSTEM_BASE;
   const ollamaMessages = [
     { role: "system", content: system },
     ...messages.map((m) => ({ role: m.role, content: m.content })),

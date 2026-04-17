@@ -1,20 +1,33 @@
 "use client";
 
+import { ConverisLogoMark } from "@/components/converis-logo-mark";
 import { INDUSTRIES } from "@/lib/industries";
+import { clearAuth } from "@/lib/auth-storage";
 import { cn } from "@/lib/utils";
 import { useDeals } from "@/providers/deals-provider";
+import { LogOutIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export function IndustrySidebar() {
   const { selectedIndustry, setSelectedIndustry } = useDeals();
+  const router = useRouter();
+
+  function logout() {
+    clearAuth();
+    router.replace("/login");
+  }
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-cyan-500/12 bg-black/60 backdrop-blur-xl supports-backdrop-filter:bg-black/45">
-      <div className="border-b border-cyan-500/12 px-4 py-5">
-        <p className="text-[10px] font-semibold tracking-[0.2em] text-sky-200/55">
+    <aside className="flex h-full min-h-0 w-[220px] shrink-0 flex-col border-r border-cyan-500/12 bg-black/60 backdrop-blur-xl supports-backdrop-filter:bg-black/45">
+      <div className="shrink-0 border-b border-cyan-500/12 px-4 py-4">
+        <div className="mb-4 flex justify-center">
+          <ConverisLogoMark size={44} className="drop-shadow-[0_0_14px_rgba(99,102,241,0.35)]" />
+        </div>
+        <p className="text-center text-[10px] font-semibold tracking-[0.2em] text-sky-200/55">
           INDUSTRIES
         </p>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {INDUSTRIES.map((name) => {
           const active = selectedIndustry === name;
           return (
@@ -40,6 +53,18 @@ export function IndustrySidebar() {
           );
         })}
       </nav>
+      <div className="shrink-0 border-t border-cyan-500/12 p-2">
+        <button
+          type="button"
+          onClick={() => {
+            logout();
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/25 bg-white/[0.03] px-3 py-2.5 text-sm text-muted-foreground transition hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-foreground"
+        >
+          <LogOutIcon className="size-4 opacity-80" />
+          Log out
+        </button>
+      </div>
     </aside>
   );
 }
