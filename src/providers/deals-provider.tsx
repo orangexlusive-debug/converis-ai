@@ -24,7 +24,7 @@ export type AppSettings = {
 };
 
 const defaultSettings: AppSettings = {
-  ollamaHost: "https://ee53-129-222-135-198.ngrok-free.app",
+  ollamaHost: "https://4213-98-97-167-90.ngrok-free.app",
   ollamaModel: "qwen2.5:32b",
 };
 
