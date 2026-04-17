@@ -1,5 +1,5 @@
-import { AuthGate } from "@/components/auth-gate";
+import { AppAuthProvider } from "@/providers/app-auth-provider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <AuthGate>{children}</AuthGate>;
+  return <AppAuthProvider>{children}</AppAuthProvider>;
 }

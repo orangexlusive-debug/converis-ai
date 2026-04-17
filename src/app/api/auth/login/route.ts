@@ -1,31 +1,17 @@
 import { NextResponse } from "next/server";
-import { SignJWT } from "jose";
+import type { NextRequest } from "next/server";
+import bcrypt from "bcrypt";
+import { prisma } from "@/lib/prisma";
+import { AUTH_COOKIE_NAME } from "@/lib/auth/constants";
+import { signAuthToken } from "@/lib/auth/jwt";
+import { authCookieOptions, serializeUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
-const USERS: Record<
-  string,
-  { password: string; name: string }
-> = {
-  "manuel.lara@converis.ai": {
-    password: "Converis2006!",
-    name: "Manuel Lara",
-  },
-  "demo@converis.ai": {
-    password: "Demo2024",
-    name: "Demo User",
-  },
-};
-
-function getSecret(): Uint8Array {
-  const s = process.env.JWT_SECRET ?? "converis-dev-jwt-secret-change-in-production";
-  return new TextEncoder().encode(s);
-}
-
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   let body: { email?: string; password?: string };
   try {
-    body = (await req.json()) as { email?: string; password?: string };
+    body = (await request.json()) as { email?: string; password?: string };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -39,23 +25,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
 
-  const user = USERS[email];
-  if (!user || user.password !== password) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.active) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
 
-  const token = await new SignJWT({
-    email,
-    name: user.name,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(email)
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(getSecret());
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) {
+    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+  }
 
-  return NextResponse.json({
-    token,
-    user: { email, name: user.name },
+  const token = await signAuthToken({
+    sub: user.id,
+    email: user.email,
+    role: user.role,
   });
+
+  const res = NextResponse.json({ user: serializeUser(user) });
+  res.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions());
+  return res;
 }

@@ -5,7 +5,6 @@ import { StarfieldCanvas } from "@/components/starfield-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getStoredToken, setAuth } from "@/lib/auth-storage";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -19,9 +18,17 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (getStoredToken()) {
-      router.replace("/app");
-    }
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (cancelled) return;
+      if (res.ok) {
+        router.replace("/app");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -32,22 +39,14 @@ export function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
-      const data = (await res.json()) as {
-        error?: string;
-        token?: string;
-        user?: { email: string; name: string };
-      };
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         setError(data.error ?? "Sign in failed.");
         return;
       }
-      if (!data.token || !data.user) {
-        setError("Invalid response from server.");
-        return;
-      }
-      setAuth(data.token, data.user);
       const next = searchParams.get("redirect");
       router.replace(next && next.startsWith("/") ? next : "/app");
     } catch {

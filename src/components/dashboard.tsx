@@ -8,17 +8,22 @@ import { IndustrySidebar } from "@/components/industry-sidebar";
 import { ChatPanel } from "@/components/chat-panel";
 import { ConverisLogoMark } from "@/components/converis-logo-mark";
 import { StarfieldCanvas } from "@/components/starfield-canvas";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { labelsForBankingBusinessTypeIds } from "@/lib/banking-business-types";
 import { labelsForHealthcareBusinessTypeIds } from "@/lib/healthcare-business-types";
 import { labelsForTechBusinessTypeIds } from "@/lib/technology-business-types";
+import { useAppAuth } from "@/providers/app-auth-provider";
+import { cn } from "@/lib/utils";
 import { useDeals } from "@/providers/deals-provider";
+import { ShieldIcon } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 export function Dashboard() {
   const [createOpen, setCreateOpen] = useState(false);
   const { deals, selectedDealId } = useDeals();
+  const { user } = useAppAuth();
 
   const selected = useMemo(
     () => deals.find((d) => d.id === selectedDealId) ?? null,
@@ -45,6 +50,18 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {user?.role === "ADMIN" && (
+              <Link
+                href="/app/admin"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "gap-1.5 border-violet-500/30 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20"
+                )}
+              >
+                <ShieldIcon className="size-4" />
+                Admin
+              </Link>
+            )}
             <ConnectionSettings />
             <Button
               onClick={() => setCreateOpen(true)}

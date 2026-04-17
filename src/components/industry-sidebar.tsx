@@ -2,18 +2,20 @@
 
 import { ConverisLogoMark } from "@/components/converis-logo-mark";
 import { INDUSTRIES } from "@/lib/industries";
-import { clearAuth } from "@/lib/auth-storage";
 import { cn } from "@/lib/utils";
+import { useAppAuth } from "@/providers/app-auth-provider";
 import { useDeals } from "@/providers/deals-provider";
-import { LogOutIcon } from "lucide-react";
+import { LogOutIcon, ShieldIcon } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function IndustrySidebar() {
   const { selectedIndustry, setSelectedIndustry } = useDeals();
+  const { user } = useAppAuth();
   const router = useRouter();
 
-  function logout() {
-    clearAuth();
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     router.replace("/login");
   }
 
@@ -26,6 +28,15 @@ export function IndustrySidebar() {
         <p className="text-center text-[10px] font-semibold tracking-[0.2em] text-sky-200/55">
           INDUSTRIES
         </p>
+        {user?.role === "ADMIN" && (
+          <Link
+            href="/app/admin"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+          >
+            <ShieldIcon className="size-3.5 opacity-90" />
+            Admin
+          </Link>
+        )}
       </div>
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {INDUSTRIES.map((name) => {
@@ -56,9 +67,7 @@ export function IndustrySidebar() {
       <div className="shrink-0 border-t border-cyan-500/12 p-2">
         <button
           type="button"
-          onClick={() => {
-            logout();
-          }}
+          onClick={() => void logout()}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/25 bg-white/[0.03] px-3 py-2.5 text-sm text-muted-foreground transition hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-foreground"
         >
           <LogOutIcon className="size-4 opacity-80" />
