@@ -5,7 +5,7 @@ import { INDUSTRIES } from "@/lib/industries";
 import { cn } from "@/lib/utils";
 import { useAppAuth } from "@/providers/app-auth-provider";
 import { useDeals } from "@/providers/deals-provider";
-import { LogOutIcon, ShieldIcon } from "lucide-react";
+import { ClipboardListIcon, LogOutIcon, ShieldIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -29,13 +29,22 @@ export function IndustrySidebar() {
           INDUSTRIES
         </p>
         {user?.role === "ADMIN" && (
-          <Link
-            href="/app/admin"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
-          >
-            <ShieldIcon className="size-3.5 opacity-90" />
-            Admin
-          </Link>
+          <div className="mt-3 flex flex-col gap-2">
+            <Link
+              href="/crm"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-500/35 bg-gradient-to-r from-[#2563EB]/20 to-[#7C3AED]/15 px-3 py-2 text-xs font-medium text-sky-100 transition hover:from-[#2563EB]/30 hover:to-[#7C3AED]/25"
+            >
+              <ClipboardListIcon className="size-3.5 opacity-90" />
+              CRM
+            </Link>
+            <Link
+              href="/app/admin"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+            >
+              <ShieldIcon className="size-3.5 opacity-90" />
+              Admin
+            </Link>
+          </div>
         )}
       </div>
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">

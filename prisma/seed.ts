@@ -1,3 +1,4 @@
+import { seedCrm } from "./crm-seed";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 
@@ -22,6 +23,9 @@ async function main() {
     },
   });
   console.log("Seeded admin@converis.ai (password: Converis2024)");
+
+  await seedCrm(prisma);
+  console.log("Seeded CRM demo data.");
 }
 
 main()
