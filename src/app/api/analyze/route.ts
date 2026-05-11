@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAnalysisPrompt } from "@/lib/analysis-prompt";
-import { extractJsonObject, isParsedAnalysis } from "@/lib/extract-json";
+import { coerceParsedAnalysis, extractJsonObject } from "@/lib/extract-json";
 import { INDUSTRIES } from "@/lib/industries";
 import {
   BANKING_INDUSTRY,
@@ -24,6 +24,7 @@ import {
   parseOllamaGenerateResponse,
   responseLooksLikeHtml,
 } from "@/lib/ollama-http";
+import { formatKbContext, indexDealUploads, retrieveFromKnowledgeBase } from "@/lib/rag/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -56,8 +57,13 @@ async function handleAnalyzePost(req: Request) {
     );
   }
 
+  const dealIdRaw = String(form.get("dealId") ?? "").trim();
+  const stableDealId = /^[a-zA-Z0-9_-]{8,128}$/.test(dealIdRaw) ? dealIdRaw : "";
+
   const dealName = String(form.get("dealName") ?? "").trim();
   const industry = String(form.get("industry") ?? "").trim();
+  const buyerIndustryRaw = String(form.get("buyerIndustry") ?? "").trim();
+  const sellerIndustryRaw = String(form.get("sellerIndustry") ?? "").trim();
   const techBusinessTypeIdsRaw = String(form.get("techBusinessTypeIds") ?? "").trim();
   const bankingBusinessTypeIdsRaw = String(form.get("bankingBusinessTypeIds") ?? "").trim();
   const healthcareBusinessTypeIdsRaw = String(form.get("healthcareBusinessTypeIds") ?? "").trim();
@@ -115,6 +121,15 @@ async function handleAnalyzePost(req: Request) {
   if (!INDUSTRIES.includes(industry as (typeof INDUSTRIES)[number])) {
     return NextResponse.json({ error: "A valid industry selection is required." }, { status: 400 });
   }
+
+  const buyerIndustry =
+    buyerIndustryRaw && INDUSTRIES.includes(buyerIndustryRaw as (typeof INDUSTRIES)[number])
+      ? buyerIndustryRaw
+      : industry;
+  const sellerIndustry =
+    sellerIndustryRaw && INDUSTRIES.includes(sellerIndustryRaw as (typeof INDUSTRIES)[number])
+      ? sellerIndustryRaw
+      : industry;
 
   if (industry === TECHNOLOGY_INDUSTRY) {
     if (techBusinessTypeIds.length === 0) {
@@ -182,9 +197,20 @@ async function handleAnalyzePost(req: Request) {
   const buyerFiles = form.getAll("buyerFiles").filter((f): f is File => f instanceof File);
   const sellerFiles = form.getAll("sellerFiles").filter((f): f is File => f instanceof File);
 
-  if (buyerFiles.length === 0 && sellerFiles.length === 0) {
+  const priorBuyerDocumentText = String(form.get("priorBuyerDocumentText") ?? "");
+  const priorSellerDocumentText = String(form.get("priorSellerDocumentText") ?? "");
+
+  const hasNewUploads = buyerFiles.length > 0 || sellerFiles.length > 0;
+  const priorBuyerTrimmed = priorBuyerDocumentText.trim();
+  const priorSellerTrimmed = priorSellerDocumentText.trim();
+  const hasPriorDocText = priorBuyerTrimmed.length > 0 || priorSellerTrimmed.length > 0;
+
+  if (!hasNewUploads && !hasPriorDocText) {
     return NextResponse.json(
-      { error: "Add at least one buyer or seller document (PDF or plain text)." },
+      {
+        error:
+          "Add at least one buyer or seller document, or supply cached extracted text when re-analyzing without new uploads.",
+      },
       { status: 400 }
     );
   }
@@ -215,15 +241,49 @@ async function handleAnalyzePost(req: Request) {
     sellerParts.push(`### ${f.name}\n${result.text}`);
   }
 
-  if (buyerParts.length === 0 && sellerParts.length === 0) {
+  if (buyerParts.length === 0 && sellerParts.length === 0 && !hasPriorDocText) {
     return NextResponse.json(
       { error: "No non-empty documents could be read. Check file types and try again." },
       { status: 400 }
     );
   }
 
-  const buyerText = buyerParts.join("\n\n");
-  const sellerText = sellerParts.join("\n\n");
+  const buyerBundles: string[] = [];
+  if (priorBuyerTrimmed) buyerBundles.push(`### Prior buyer-side uploads (cached)\n${priorBuyerTrimmed}`);
+  if (buyerParts.length) buyerBundles.push(`### New buyer-side uploads\n${buyerParts.join("\n\n")}`);
+  const buyerText = buyerBundles.join("\n\n").trim();
+
+  const sellerBundles: string[] = [];
+  if (priorSellerTrimmed) sellerBundles.push(`### Prior seller-side uploads (cached)\n${priorSellerTrimmed}`);
+  if (sellerParts.length) sellerBundles.push(`### New seller-side uploads\n${sellerParts.join("\n\n")}`);
+  const sellerText = sellerBundles.join("\n\n").trim();
+
+  if (!buyerText && !sellerText) {
+    return NextResponse.json(
+      { error: "No usable buyer or seller text after merging cached content and new uploads." },
+      { status: 400 }
+    );
+  }
+
+  // RAG: retrieve relevant domain knowledge from local knowledge_base.
+  const ragQuery = [
+    "M&A",
+    "post-merger integration",
+    "PMI",
+    dealName,
+    `buyer industry: ${buyerIndustry}`,
+    `seller industry: ${sellerIndustry}`,
+    `analysis framework industry: ${industry}`,
+  ].join(" · ");
+  let kbHits: Awaited<ReturnType<typeof retrieveFromKnowledgeBase>> = [];
+  try {
+    kbHits = await retrieveFromKnowledgeBase({ query: ragQuery, ollamaHost, topK: undefined });
+  } catch (e) {
+    // If embeddings/indexing fails, continue without KB (still fully local).
+    console.warn("[rag] KB retrieval failed:", e);
+    kbHits = [];
+  }
+  const kbContext = formatKbContext(kbHits);
 
   const technologyBusinessContextForModel =
     industry === TECHNOLOGY_INDUSTRY && techBusinessTypeIds.length > 0
@@ -243,6 +303,8 @@ async function handleAnalyzePost(req: Request) {
   const prompt = buildAnalysisPrompt({
     dealName,
     industry,
+    buyerIndustry,
+    sellerIndustry,
     buyerText,
     sellerText,
     buyerTruncated: buyerTrunc,
@@ -250,6 +312,7 @@ async function handleAnalyzePost(req: Request) {
     technologyBusinessContextForModel,
     bankingBusinessContextForModel,
     healthcareBusinessContextForModel,
+    kbContext,
   });
 
   const url = `${ollamaHost}/api/generate`;
@@ -268,7 +331,7 @@ async function handleAnalyzePost(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Request failed";
     return NextResponse.json(
-      { error: `Could not reach Ollama at ${ollamaHost}. ${msg}` },
+      { error: `Could not reach the inference server at ${ollamaHost}. ${msg}` },
       { status: 502 }
     );
   }
@@ -278,15 +341,15 @@ async function handleAnalyzePost(req: Request) {
     if (responseLooksLikeHtml(rawText)) {
       return NextResponse.json(
         {
-          error: `Ollama returned HTTP ${ollamaRes.status} with an HTML page instead of JSON.`,
-          hint: "Check the Ollama URL, ngrok tunnel, and that Ollama is running.",
+          error: `The inference server returned HTTP ${ollamaRes.status} with an HTML page instead of JSON.`,
+          hint: "Check the base URL, tunnel, and that the inference service is running.",
           rawSnippet: rawText.slice(0, 400),
         },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: `Ollama error (${ollamaRes.status}): ${rawText || ollamaRes.statusText}` },
+      { error: `Inference server error (${ollamaRes.status}): ${rawText || ollamaRes.statusText}` },
       { status: 502 }
     );
   }
@@ -308,7 +371,7 @@ async function handleAnalyzePost(req: Request) {
   if (!responseText.trim()) {
     return NextResponse.json(
       {
-        error: "Ollama returned an empty response.",
+        error: "The inference server returned an empty response.",
         rawResponse: rawText,
         model: ollamaModel,
       },
@@ -320,11 +383,25 @@ async function handleAnalyzePost(req: Request) {
   let parsed: import("@/lib/types/analysis").ParsedAnalysis | null = null;
   let parseError: string | undefined;
 
-  if (extracted && isParsedAnalysis(extracted)) {
-    parsed = extracted;
-  } else {
+  if (extracted) {
+    parsed = coerceParsedAnalysis(extracted);
+  }
+  if (!parsed) {
     parseError =
       "The model response could not be parsed as the expected JSON schema. Showing the raw output only.";
+  }
+
+  if (stableDealId) {
+    try {
+      await indexDealUploads({
+        dealId: stableDealId,
+        buyerText,
+        sellerText,
+        ollamaHost,
+      });
+    } catch (e) {
+      console.warn("[rag] deal upload indexing failed:", e);
+    }
   }
 
   return NextResponse.json({
@@ -333,5 +410,7 @@ async function handleAnalyzePost(req: Request) {
     parseError,
     model: ollamaModel,
     analyzedAt: new Date().toISOString(),
+    buyerDocumentText: buyerText,
+    sellerDocumentText: sellerText,
   });
 }

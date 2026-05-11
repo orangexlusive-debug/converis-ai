@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Converis AI · Local PMI Platform",
   description:
-    "Privacy-first, local-only post-merger integration platform powered by Ollama.",
+    "Privacy-first, local-only post-merger integration intelligence for your infrastructure.",
   icons: {
     icon: "/converis-logo.png",
     apple: "/converis-logo.png",

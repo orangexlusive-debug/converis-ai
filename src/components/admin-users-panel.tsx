@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminDealsSection } from "@/components/admin-deals-section";
+import { AdminInferenceSettings } from "@/components/admin-inference-settings";
 import { StarfieldCanvas } from "@/components/starfield-canvas";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -69,7 +71,7 @@ export function AdminUsersPanel() {
             >
               <ArrowLeftIcon className="size-4" />
             </Link>
-            <h1 className="text-sm font-semibold tracking-tight text-white">User administration</h1>
+            <h1 className="text-sm font-semibold tracking-tight text-white">Administration</h1>
           </div>
         </div>
       </header>
@@ -172,6 +174,9 @@ export function AdminUsersPanel() {
             </table>
           </div>
         </div>
+
+        <AdminDealsSection />
+        <AdminInferenceSettings />
       </main>
 
       <UserFormDialog

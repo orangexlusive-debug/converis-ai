@@ -1,5 +1,5 @@
 /** Override with OLLAMA_HOST / OLLAMA_MODEL in `.env.local`. */
-const DEFAULT_HOST = "https://4213-98-97-167-90.ngrok-free.app";
+const DEFAULT_HOST = "http://127.0.0.1:11434";
 const DEFAULT_MODEL = "qwen2.5:32b";
 
 export function normalizeOllamaHost(input: string | null | undefined): string {

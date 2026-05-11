@@ -22,31 +22,21 @@ import { BankingBusinessTypePicker } from "@/components/banking-business-type-pi
 import { HealthcareBusinessTypePicker } from "@/components/healthcare-business-type-picker";
 import { TechnologyBusinessTypePicker } from "@/components/technology-business-type-picker";
 import { DOCUMENT_ACCEPT } from "@/lib/document-extract";
-import { isParsedAnalysis } from "@/lib/extract-json";
+import { coerceParsedAnalysis } from "@/lib/extract-json";
+import { nanoid } from "nanoid";
+import { populateAnalyzeFormData } from "@/lib/build-analyze-form-data";
 import { INDUSTRIES } from "@/lib/industries";
+import { mergeUniqueFiles } from "@/lib/merge-upload-files";
 import { BANKING_INDUSTRY } from "@/lib/banking-business-types";
 import { HEALTHCARE_INDUSTRY } from "@/lib/healthcare-business-types";
 import { TECHNOLOGY_INDUSTRY } from "@/lib/technology-business-types";
 import { useDeals } from "@/providers/deals-provider";
 import { Loader2Icon, PlusIcon, XIcon } from "lucide-react";
 import type { RefObject } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Stable placeholder value so Select stays controlled (never `undefined`). */
 const INDUSTRY_NONE = "__industry_none__";
-
-function mergeUniqueFiles(existing: File[], added: File[]): File[] {
-  const key = (f: File) => `${f.name}::${f.size}::${f.lastModified}`;
-  const keys = new Set(existing.map(key));
-  const out = [...existing];
-  for (const f of added) {
-    const k = key(f);
-    if (keys.has(k)) continue;
-    keys.add(k);
-    out.push(f);
-  }
-  return out;
-}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -147,7 +137,9 @@ type Props = {
 export function CreateDealModal({ open, onOpenChange }: Props) {
   const { addDeal, updateDeal, settings, setSelectedIndustry } = useDeals();
   const [dealName, setDealName] = useState("");
-  const [industry, setIndustry] = useState<string>(INDUSTRY_NONE);
+  const [buyerIndustry, setBuyerIndustry] = useState<string>(INDUSTRY_NONE);
+  const [sellerIndustry, setSellerIndustry] = useState<string>(INDUSTRY_NONE);
+  const [analysisIndustry, setAnalysisIndustry] = useState<string>(INDUSTRY_NONE);
   const [buyerFiles, setBuyerFiles] = useState<File[]>([]);
   const [sellerFiles, setSellerFiles] = useState<File[]>([]);
   const [techBusinessTypeIds, setTechBusinessTypeIds] = useState<string[]>([]);
@@ -160,7 +152,9 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
 
   const reset = useCallback(() => {
     setDealName("");
-    setIndustry(INDUSTRY_NONE);
+    setBuyerIndustry(INDUSTRY_NONE);
+    setSellerIndustry(INDUSTRY_NONE);
+    setAnalysisIndustry(INDUSTRY_NONE);
     setBuyerFiles([]);
     setSellerFiles([]);
     setTechBusinessTypeIds([]);
@@ -170,23 +164,52 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
     setLoading(false);
   }, []);
 
-  const resolvedIndustry =
-    industry !== INDUSTRY_NONE && INDUSTRIES.includes(industry as (typeof INDUSTRIES)[number])
-      ? industry
+  const resolvedBuyerIndustry =
+    buyerIndustry !== INDUSTRY_NONE &&
+    INDUSTRIES.includes(buyerIndustry as (typeof INDUSTRIES)[number])
+      ? buyerIndustry
       : null;
 
+  const resolvedSellerIndustry =
+    sellerIndustry !== INDUSTRY_NONE &&
+    INDUSTRIES.includes(sellerIndustry as (typeof INDUSTRIES)[number])
+      ? sellerIndustry
+      : null;
+
+  const resolvedAnalysisIndustry =
+    analysisIndustry !== INDUSTRY_NONE &&
+    INDUSTRIES.includes(analysisIndustry as (typeof INDUSTRIES)[number])
+      ? analysisIndustry
+      : null;
+
+  useEffect(() => {
+    if (!resolvedBuyerIndustry || !resolvedSellerIndustry) return;
+    if (resolvedBuyerIndustry === resolvedSellerIndustry) {
+      setAnalysisIndustry(resolvedBuyerIndustry);
+      return;
+    }
+    if (!resolvedAnalysisIndustry) {
+      setAnalysisIndustry(resolvedBuyerIndustry);
+      setTechBusinessTypeIds([]);
+      setBankingBusinessTypeIds([]);
+      setHealthcareBusinessTypeIds([]);
+    }
+  }, [resolvedBuyerIndustry, resolvedSellerIndustry, resolvedAnalysisIndustry]);
+
   const techTypesSatisfied =
-    resolvedIndustry !== TECHNOLOGY_INDUSTRY || techBusinessTypeIds.length > 0;
+    resolvedAnalysisIndustry !== TECHNOLOGY_INDUSTRY || techBusinessTypeIds.length > 0;
 
   const bankingTypesSatisfied =
-    resolvedIndustry !== BANKING_INDUSTRY || bankingBusinessTypeIds.length > 0;
+    resolvedAnalysisIndustry !== BANKING_INDUSTRY || bankingBusinessTypeIds.length > 0;
 
   const healthcareTypesSatisfied =
-    resolvedIndustry !== HEALTHCARE_INDUSTRY || healthcareBusinessTypeIds.length > 0;
+    resolvedAnalysisIndustry !== HEALTHCARE_INDUSTRY || healthcareBusinessTypeIds.length > 0;
 
   const canAnalyze =
     dealName.trim().length > 0 &&
-    resolvedIndustry !== null &&
+    resolvedBuyerIndustry !== null &&
+    resolvedSellerIndustry !== null &&
+    resolvedAnalysisIndustry !== null &&
     techTypesSatisfied &&
     bankingTypesSatisfied &&
     healthcareTypesSatisfied &&
@@ -197,22 +220,25 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
     setLoading(true);
     setError(null);
 
+    const dealId = nanoid();
     const form = new FormData();
-    form.append("dealName", dealName.trim());
-    form.append("industry", resolvedIndustry!);
-    form.append("ollamaHost", settings.ollamaHost);
-    form.append("ollamaModel", settings.ollamaModel);
-    if (resolvedIndustry === TECHNOLOGY_INDUSTRY && techBusinessTypeIds.length > 0) {
-      form.append("techBusinessTypeIds", JSON.stringify(techBusinessTypeIds));
-    }
-    if (resolvedIndustry === BANKING_INDUSTRY && bankingBusinessTypeIds.length > 0) {
-      form.append("bankingBusinessTypeIds", JSON.stringify(bankingBusinessTypeIds));
-    }
-    if (resolvedIndustry === HEALTHCARE_INDUSTRY && healthcareBusinessTypeIds.length > 0) {
-      form.append("healthcareBusinessTypeIds", JSON.stringify(healthcareBusinessTypeIds));
-    }
-    buyerFiles.forEach((f) => form.append("buyerFiles", f));
-    sellerFiles.forEach((f) => form.append("sellerFiles", f));
+    populateAnalyzeFormData(form, {
+      dealId,
+      dealName: dealName.trim(),
+      industry: resolvedAnalysisIndustry!,
+      buyerIndustry: resolvedBuyerIndustry!,
+      sellerIndustry: resolvedSellerIndustry!,
+      technologyBusinessTypeIds:
+        resolvedAnalysisIndustry === TECHNOLOGY_INDUSTRY ? [...techBusinessTypeIds] : undefined,
+      bankingBusinessTypeIds:
+        resolvedAnalysisIndustry === BANKING_INDUSTRY ? [...bankingBusinessTypeIds] : undefined,
+      healthcareBusinessTypeIds:
+        resolvedAnalysisIndustry === HEALTHCARE_INDUSTRY ? [...healthcareBusinessTypeIds] : undefined,
+      ollamaHost: settings.ollamaHost,
+      ollamaModel: settings.ollamaModel,
+      buyerFiles,
+      sellerFiles,
+    });
 
     try {
       const res = await fetch("/api/analyze", {
@@ -226,8 +252,10 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
         parseError?: string;
         model?: string;
         analyzedAt?: string;
+        buyerDocumentText?: string;
+        sellerDocumentText?: string;
       };
-      const parsed = isParsedAnalysis(data.parsed) ? data.parsed : null;
+      const parsed = coerceParsedAnalysis(data.parsed);
 
       if (!res.ok) {
         setError(data.error || `Request failed (${res.status})`);
@@ -236,20 +264,25 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
       }
 
       const deal = addDeal({
+        id: dealId,
         name: dealName.trim(),
-        industry: resolvedIndustry!,
+        industry: resolvedAnalysisIndustry!,
+        buyerIndustry: resolvedBuyerIndustry!,
+        sellerIndustry: resolvedSellerIndustry!,
         technologyBusinessTypeIds:
-          resolvedIndustry === TECHNOLOGY_INDUSTRY ? [...techBusinessTypeIds] : undefined,
+          resolvedAnalysisIndustry === TECHNOLOGY_INDUSTRY ? [...techBusinessTypeIds] : undefined,
         bankingBusinessTypeIds:
-          resolvedIndustry === BANKING_INDUSTRY ? [...bankingBusinessTypeIds] : undefined,
+          resolvedAnalysisIndustry === BANKING_INDUSTRY ? [...bankingBusinessTypeIds] : undefined,
         healthcareBusinessTypeIds:
-          resolvedIndustry === HEALTHCARE_INDUSTRY ? [...healthcareBusinessTypeIds] : undefined,
+          resolvedAnalysisIndustry === HEALTHCARE_INDUSTRY ? [...healthcareBusinessTypeIds] : undefined,
         buyerFileNames: buyerFiles.map((f) => f.name),
         sellerFileNames: sellerFiles.map((f) => f.name),
         chatMessages: [],
       });
 
       updateDeal(deal.id, {
+        ...(typeof data.buyerDocumentText === "string" ? { buyerDocumentText: data.buyerDocumentText } : {}),
+        ...(typeof data.sellerDocumentText === "string" ? { sellerDocumentText: data.sellerDocumentText } : {}),
         analysis: {
           rawResponse: data.rawResponse ?? "",
           parsed,
@@ -259,7 +292,7 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
         },
       });
 
-      setSelectedIndustry(resolvedIndustry!);
+      setSelectedIndustry(resolvedAnalysisIndustry!);
       onOpenChange(false);
       reset();
     } catch (e) {
@@ -284,7 +317,7 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
             Add buyer and seller documents in multiple batches (PDFs and plain-text files). For
             Technology, Banking, or Healthcare, pick business types (labels only; definitions go to
             your model).
-            Analysis runs entirely against your Ollama instance — no external APIs.
+            Analysis runs entirely against your private inference endpoint — no external APIs.
           </DialogDescription>
         </DialogHeader>
 
@@ -299,48 +332,95 @@ export function CreateDealModal({ open, onOpenChange }: Props) {
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label>Industry (required)</Label>
-            <Select
-              value={industry}
-              onValueChange={(v) => {
-                setIndustry(v ?? INDUSTRY_NONE);
-                setTechBusinessTypeIds([]);
-                setBankingBusinessTypeIds([]);
-                setHealthcareBusinessTypeIds([]);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={INDUSTRY_NONE} className="text-muted-foreground">
-                  Select an industry
-                </SelectItem>
-                {INDUSTRIES.map((ind) => (
-                  <SelectItem key={ind} value={ind}>
-                    {ind}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label>Buyer industry (required)</Label>
+              <Select value={buyerIndustry} onValueChange={(v) => setBuyerIndustry(v ?? INDUSTRY_NONE)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={INDUSTRY_NONE} className="text-muted-foreground">
+                    Select an industry
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {INDUSTRIES.map((ind) => (
+                    <SelectItem key={ind} value={ind}>
+                      {ind}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Seller industry (required)</Label>
+              <Select value={sellerIndustry} onValueChange={(v) => setSellerIndustry(v ?? INDUSTRY_NONE)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={INDUSTRY_NONE} className="text-muted-foreground">
+                    Select an industry
+                  </SelectItem>
+                  {INDUSTRIES.map((ind) => (
+                    <SelectItem key={ind} value={ind}>
+                      {ind}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {industry === TECHNOLOGY_INDUSTRY && (
+          {resolvedBuyerIndustry &&
+            resolvedSellerIndustry &&
+            resolvedBuyerIndustry !== resolvedSellerIndustry && (
+              <div className="grid gap-2">
+                <Label>Analysis framework industry (required)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Buyer and seller industries differ. Pick which industry should drive the analysis
+                  framework and business-type labels.
+                </p>
+                <Select
+                  value={analysisIndustry}
+                  onValueChange={(v) => {
+                    setAnalysisIndustry(v ?? INDUSTRY_NONE);
+                    setTechBusinessTypeIds([]);
+                    setBankingBusinessTypeIds([]);
+                    setHealthcareBusinessTypeIds([]);
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={INDUSTRY_NONE} className="text-muted-foreground">
+                      Choose analysis industry
+                    </SelectItem>
+                    {[resolvedBuyerIndustry, resolvedSellerIndustry].map((ind) => (
+                      <SelectItem key={ind} value={ind}>
+                        {ind}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+          {resolvedAnalysisIndustry === TECHNOLOGY_INDUSTRY && (
             <TechnologyBusinessTypePicker
               selectedIds={techBusinessTypeIds}
               onChange={setTechBusinessTypeIds}
             />
           )}
 
-          {industry === BANKING_INDUSTRY && (
+          {resolvedAnalysisIndustry === BANKING_INDUSTRY && (
             <BankingBusinessTypePicker
               selectedIds={bankingBusinessTypeIds}
               onChange={setBankingBusinessTypeIds}
             />
           )}
 
-          {industry === HEALTHCARE_INDUSTRY && (
+          {resolvedAnalysisIndustry === HEALTHCARE_INDUSTRY && (
             <HealthcareBusinessTypePicker
               selectedIds={healthcareBusinessTypeIds}
               onChange={setHealthcareBusinessTypeIds}

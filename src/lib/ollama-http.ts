@@ -1,6 +1,6 @@
 /**
- * Headers for calling Ollama through tunnels (ngrok free tier returns an HTML
- * interstitial unless this header is set).
+ * Headers for calling a compatible inference API through tunnels (some tunnels
+ * return an HTML interstitial unless this header is set).
  */
 export function ollamaTunnelHeaders(originOrUrl: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -23,15 +23,15 @@ export function ollamaTunnelHeaders(originOrUrl: string): Record<string, string>
   return headers;
 }
 
-/** True if the body looks like HTML (proxy/ngrok page, not Ollama JSON). */
+/** True if the body looks like HTML (proxy/tunnel page, not JSON). */
 export function responseLooksLikeHtml(body: string): boolean {
   const t = body.trimStart();
   return t.startsWith("<") || t.startsWith("\ufeff<");
 }
 
 /**
- * Parse Ollama /api/generate JSON body. HTML from proxies/ngrok is an error.
- * If the body is not JSON but not HTML, treat the raw text as the model output (Ollama edge cases).
+ * Parse /api/generate-style JSON body. HTML from proxies/tunnels is an error.
+ * If the body is not JSON but not HTML, treat the raw text as the model output.
  */
 export function parseOllamaGenerateResponse(rawText: string): {
   ok: true;
@@ -48,7 +48,7 @@ export function parseOllamaGenerateResponse(rawText: string): {
     return {
       ok: false,
       error:
-        "Ollama endpoint returned HTML instead of JSON. This often happens with ngrok without the skip-browser-warning header, a wrong URL, or a proxy error page.",
+        "The inference endpoint returned HTML instead of JSON. This often happens with tunnels without the skip-browser-warning header, a wrong URL, or a proxy error page.",
       rawSnippet: rawText.slice(0, 400),
     };
   }

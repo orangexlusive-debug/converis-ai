@@ -1,6 +1,7 @@
 "use client";
 
 import { AnalysisDetail } from "@/components/analysis-detail";
+import { DealDocumentAppendPanel } from "@/components/deal-document-append";
 import { ConnectionSettings } from "@/components/connection-popover";
 import { CreateDealModal } from "@/components/create-deal-modal";
 import { DealsGrid } from "@/components/deals-grid";
@@ -134,6 +135,8 @@ export function Dashboard() {
                         )}
                     </p>
                   </div>
+
+                  <DealDocumentAppendPanel deal={selected} />
 
                   {selected.analysis ? (
                     <AnalysisDetail

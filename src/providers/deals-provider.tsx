@@ -3,6 +3,7 @@
 import { labelsForBankingBusinessTypeIds } from "@/lib/banking-business-types";
 import { labelsForHealthcareBusinessTypeIds } from "@/lib/healthcare-business-types";
 import { labelsForTechBusinessTypeIds } from "@/lib/technology-business-types";
+import { coerceParsedAnalysis } from "@/lib/extract-json";
 import type { ParsedAnalysis } from "@/lib/types/analysis";
 import type { Deal } from "@/lib/types/deal";
 import { nanoid } from "nanoid";
@@ -24,7 +25,7 @@ export type AppSettings = {
 };
 
 const defaultSettings: AppSettings = {
-  ollamaHost: "https://4213-98-97-167-90.ngrok-free.app",
+  ollamaHost: "http://127.0.0.1:11434",
   ollamaModel: "qwen2.5:32b",
 };
 
@@ -36,8 +37,10 @@ type DealsContextValue = {
   setSelectedIndustry: (industry: string) => void;
   selectedDealId: string | null;
   setSelectedDealId: (id: string | null) => void;
-  addDeal: (deal: Omit<Deal, "id" | "createdAt" | "updatedAt">) => Deal;
+  addDeal: (deal: Omit<Deal, "id" | "createdAt" | "updatedAt"> & { id?: string }) => Deal;
   updateDeal: (id: string, patch: Partial<Deal>) => void;
+  /** Permanently removes a deal from local session storage (browser). */
+  deleteDeal: (id: string) => void;
   appendChat: (dealId: string, role: "user" | "assistant", content: string) => void;
 };
 
@@ -49,7 +52,24 @@ function loadDeals(): Deal[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Deal[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((d) => {
+      const industry = typeof d.industry === "string" && d.industry.trim() ? d.industry : "Technology";
+      const buyerIndustry =
+        typeof (d as Partial<Deal>).buyerIndustry === "string" && (d as Partial<Deal>).buyerIndustry?.trim()
+          ? String((d as Partial<Deal>).buyerIndustry)
+          : industry;
+      const sellerIndustry =
+        typeof (d as Partial<Deal>).sellerIndustry === "string" && (d as Partial<Deal>).sellerIndustry?.trim()
+          ? String((d as Partial<Deal>).sellerIndustry)
+          : industry;
+      let analysis = d.analysis;
+      if (analysis?.parsed) {
+        const coerced = coerceParsedAnalysis(analysis.parsed as unknown);
+        if (coerced) analysis = { ...analysis, parsed: coerced };
+      }
+      return { ...d, industry, buyerIndustry, sellerIndustry, analysis };
+    });
   } catch {
     return [];
   }
@@ -102,11 +122,14 @@ export function DealsProvider({ children }: { children: React.ReactNode }) {
     setSettingsState((prev) => ({ ...prev, ...s }));
   }, []);
 
-  const addDeal = useCallback((deal: Omit<Deal, "id" | "createdAt" | "updatedAt">) => {
+  const addDeal = useCallback((deal: Omit<Deal, "id" | "createdAt" | "updatedAt"> & { id?: string }) => {
     const now = new Date().toISOString();
+    const { id: explicitId, ...dealFields } = deal;
+    const id =
+      typeof explicitId === "string" && /^[a-zA-Z0-9_-]{8,128}$/.test(explicitId) ? explicitId : nanoid();
     const full: Deal = {
-      ...deal,
-      id: nanoid(),
+      ...dealFields,
+      id,
       createdAt: now,
       updatedAt: now,
     };
@@ -121,6 +144,11 @@ export function DealsProvider({ children }: { children: React.ReactNode }) {
         d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d
       )
     );
+  }, []);
+
+  const deleteDeal = useCallback((id: string) => {
+    setDeals((list) => list.filter((d) => d.id !== id));
+    setSelectedDealId((cur) => (cur === id ? null : cur));
   }, []);
 
   const appendChat = useCallback((dealId: string, role: "user" | "assistant", content: string) => {
@@ -148,6 +176,7 @@ export function DealsProvider({ children }: { children: React.ReactNode }) {
       setSelectedDealId,
       addDeal,
       updateDeal,
+      deleteDeal,
       appendChat,
     }),
     [
@@ -158,6 +187,7 @@ export function DealsProvider({ children }: { children: React.ReactNode }) {
       selectedDealId,
       addDeal,
       updateDeal,
+      deleteDeal,
       appendChat,
     ]
   );
@@ -188,9 +218,42 @@ export function buildDealContextBlock(deal: Deal, analysis: ParsedAnalysis | nul
     );
   }
   if (analysis) {
-    lines.push(`Executive summary: ${analysis.executiveSummary}`);
-    lines.push(`Culture/retention risk score: ${analysis.cultureRetentionRiskScore}`);
-    lines.push(`Synergies & leakage: ${analysis.synergiesValueLeakage}`);
+    const summarize = (text: string, max = 1200) =>
+      text.length <= max ? text : `${text.slice(0, max)}…`;
+    /** Saved deals may omit newer fields; coercion fills defaults when possible. */
+    const normalized = coerceParsedAnalysis(analysis as unknown);
+    const a = normalized ?? analysis;
+    lines.push(`Executive summary: ${summarize(a.executiveSummary ?? "", 1600)}`);
+    lines.push(`Culture/retention risk score: ${a.cultureRetentionRiskScore}`);
+    lines.push(`Culture note: ${summarize(a.cultureRetentionNarrative ?? "")}`);
+    lines.push(`Synergies & leakage: ${summarize(a.synergiesValueLeakage ?? "", 1400)}`);
+    lines.push(`Recommended merger proceeding (excerpt): ${summarize(a.recommendedMergerProceeding ?? "", 1400)}`);
+    const programSteps = (a.programLevelStepByStep ?? []).slice(0, 14);
+    if (programSteps.length) {
+      lines.push(`Program-level merger steps:\n- ${programSteps.join("\n- ")}`);
+    }
+    const deptLabels = (a.departmentMergerPlans ?? [])
+      .slice(0, 10)
+      .map((d) => d.department)
+      .filter((x): x is string => typeof x === "string" && x.length > 0);
+    if (deptLabels.length) {
+      lines.push(`Department / function plans touched: ${deptLabels.join(", ")}`);
+    }
+    const decisions = (a.executiveKeyDecisionsNeeded ?? []).slice(0, 10);
+    if (decisions.length) {
+      lines.push(`Steering decisions needed:\n- ${decisions.join("\n- ")}`);
+    }
+    const gaps = (a.evidenceGapsAndDiligenceQuestions ?? []).slice(0, 8);
+    if (gaps.length) {
+      lines.push(`Evidence gaps / diligence:\n- ${gaps.join("\n- ")}`);
+    }
+    const failures = (a.failurePointDetails ?? [])
+      .slice(0, 8)
+      .map((f) => f.title)
+      .filter((t) => typeof t === "string" && t.length > 0);
+    if (failures.length) {
+      lines.push(`Failure modes flagged:\n- ${failures.join("\n- ")}`);
+    }
   }
   return lines.join("\n");
 }

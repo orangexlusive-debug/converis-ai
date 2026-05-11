@@ -38,6 +38,7 @@ export function ChatPanel() {
           ollamaHost: settings.ollamaHost,
           ollamaModel: settings.ollamaModel,
           dealContext,
+          dealId: deal.id,
         }),
       });
       const data = (await res.json()) as { error?: string; message?: string };
@@ -62,7 +63,7 @@ export function ChatPanel() {
       <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-cyan-500/12 bg-black/60 backdrop-blur-xl supports-backdrop-filter:bg-black/45">
         <div className="border-b border-cyan-500/12 px-4 py-4">
           <p className="text-sm font-medium">Assistant</p>
-          <p className="text-xs text-muted-foreground">Local Ollama · same session context</p>
+          <p className="text-xs text-muted-foreground">Private inference · same session context</p>
         </div>
         <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           Select a deal to chat with the assistant about its integration context.
@@ -84,8 +85,8 @@ export function ChatPanel() {
         <div className="flex flex-col gap-3 py-4">
           {deal.chatMessages.length === 0 && (
             <p className="text-center text-xs text-muted-foreground">
-              Ask follow-ups about risks, timeline, or remediation. Responses come only from your
-              Ollama model.
+              Ask follow-ups about risks, timeline, or remediation. Responses use your private
+              inference session.
             </p>
           )}
           {deal.chatMessages.map((m, i) => (

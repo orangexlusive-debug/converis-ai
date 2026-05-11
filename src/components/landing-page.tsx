@@ -48,7 +48,7 @@ export function LandingPage() {
           Close the gap between deal thesis and integration reality.
         </h1>
         <p className="mb-10 max-w-2xl text-base text-muted-foreground sm:text-lg">
-          Converis AI runs entirely on your infrastructure—Ollama-powered analysis, document-grounded
+          Converis AI runs entirely on your infrastructure—private model analysis, document-grounded
           PMI insights, and a workspace built for operators who need precision without cloud
           leakage.
         </p>

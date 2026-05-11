@@ -11,11 +11,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAppAuth } from "@/providers/app-auth-provider";
 import { useDeals } from "@/providers/deals-provider";
 import { Settings2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function ConnectionSettings() {
+  const { user } = useAppAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { settings, setSettings } = useDeals();
   const [open, setOpen] = useState(false);
   const [host, setHost] = useState(settings.ollamaHost);
@@ -42,59 +45,65 @@ export function ConnectionSettings() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-          <DialogTitle>Ollama connection</DialogTitle>
-          <DialogDescription>
-            Point Converis AI at your local or rack Ollama instance. Values are stored in this
-            browser only. The model name must match exactly what{" "}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">ollama list</code> shows
-            (pull first: <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">ollama pull …</code>
-            ). For a smarter model, try{" "}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">llama3.1:70b</code>,{" "}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">qwen2.5:32b</code>, or{" "}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">mistral-large</code> if
-            your hardware supports them.
-          </DialogDescription>
+            <DialogTitle>Inference connection</DialogTitle>
+            <DialogDescription>
+              Point Converis AI at your private inference endpoint (for example on your network or
+              tunnel). Values are stored in this browser only.
+              {isAdmin ?
+                " Admins can also set the model identifier used for analyze and chat."
+              : " The inference model is configured by an administrator."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-          <div className="grid gap-2">
-            <Label htmlFor="ollama-host">Base URL</Label>
-            <Input
-              id="ollama-host"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder="http://localhost:11434"
-              autoComplete="off"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="ollama-model">Model</Label>
-            <Input
-              id="ollama-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="llama3.1:8b"
-              autoComplete="off"
-            />
-          </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inference-host">Base URL</Label>
+              <Input
+                id="inference-host"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="http://localhost:11434"
+                autoComplete="off"
+              />
+            </div>
+            {isAdmin ?
+              <div className="grid gap-2">
+                <Label htmlFor="inference-model">Model</Label>
+                <Input
+                  id="inference-model"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="qwen2.5:32b"
+                  autoComplete="off"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Must match exactly what your server has installed (for example{" "}
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">llama3.1:70b</code>).
+                </p>
+              </div>
+            : null}
           </div>
           <DialogFooter>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setHost(settings.ollamaHost);
-              setModel(settings.ollamaModel);
-            }}
-          >
-            Reset
-          </Button>
-          <Button
-            onClick={() => {
-              setSettings({ ollamaHost: host.trim(), ollamaModel: model.trim() });
-              setOpen(false);
-            }}
-          >
-            Save
-          </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setHost(settings.ollamaHost);
+                setModel(settings.ollamaModel);
+              }}
+            >
+              Reset
+            </Button>
+            <Button
+              onClick={() => {
+                if (isAdmin) {
+                  setSettings({ ollamaHost: host.trim(), ollamaModel: model.trim() });
+                } else {
+                  setSettings({ ollamaHost: host.trim() });
+                }
+                setOpen(false);
+              }}
+            >
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
